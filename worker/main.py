@@ -120,7 +120,7 @@ def stop_group():
     url = f"https://api.salad.com/api/public/organizations/{org}/projects/{proj}/containers/{name}/stop"
     for _ in range(5):
         try:
-            urllib.request.urlopen(urllib.request.Request(url, method="POST", headers={"Salad-Api-Key": key}), timeout=30)
+            urllib.request.urlopen(urllib.request.Request(url, method="POST", headers={"Salad-Api-Key": key, "User-Agent": "mae-salad/1.0"}), timeout=30)
             log("stop requested")
             return
         except Exception as e:
