@@ -19,5 +19,5 @@ jobs:
           context: worker
           push: true
           tags: |
-            ghcr.io/kainelabs/mae-worker:latest
-            ghcr.io/kainelabs/mae-worker:${{ github.sha }}
+            ghcr.io/kainelabs/mae-worker-public:latest
+            ghcr.io/kainelabs/mae-worker-public:${{ github.sha }}

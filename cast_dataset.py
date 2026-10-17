@@ -90,7 +90,7 @@ def data(name, src, drop):
         kept += 1
     c = CAST["people"][name]
     trig = c["trigger"]
-    train = {"trigger": trig, "steps": 2500, "rank": 16, "lr": 1e-4, "save_every": 100, "sample_every": 500,
+    train = {"trigger": trig, "steps": 1200, "rank": 16, "lr": 1e-4, "save_every": 100, "sample_every": 400,
              "samples": [f"{trig}, sitting at a farmhouse kitchen table at night with a cup of coffee, warm lamp light. {TAIL}",
                          f"{trig}, full body, standing on a farmhouse porch in autumn, smiling. {TAIL}"]}
     json.dump(train, open(os.path.join(LORA, name, "train.json"), "w"), indent=1)
