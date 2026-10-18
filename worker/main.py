@@ -489,7 +489,9 @@ def run_gen():
             STATUS["done"] += 1
             timings[j["id"]] = round(time.time() - t, 1)
             log(f"{j['kind']} {j['id']} done in {timings[j['id']]:.0f} s ({STATUS['done']}/{STATUS['total']})")
-            if len(timings) > 1 and timings[j["id"]] > SLOW[j["kind"]] * (j.get("seconds", 1) if j["kind"] in ("i2v", "talk") else 1) / (10 if j["kind"] in ("i2v", "talk") else 1):
+            # full-quality edits (40 steps, no Lightning LoRA) take ~6x longer than the 4-step ones the limit assumes
+            slow = SLOW[j["kind"]] * (6 if j["kind"] == "edit" and not j.get("lightning", True) else 1)
+            if len(timings) > 1 and timings[j["id"]] > slow * (j.get("seconds", 1) if j["kind"] in ("i2v", "talk") else 1) / (10 if j["kind"] in ("i2v", "talk") else 1):
                 reallocate_self(f"{j['id']} took {timings[j['id']]:.0f} s")
         except TimeoutError as e:
             STATUS["failed"].append(j["id"])

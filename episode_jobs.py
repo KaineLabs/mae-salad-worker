@@ -109,22 +109,22 @@ def ref_sheet(people, out_dir):
 
 def ref_prompt(prompt, cast):
     """Method B (picked 2026-10-18 over Z-Image + LoRAs in a side-by-side test): Qwen-Image-Edit draws the scene from
-    the people's reference drawings, so 3-4 people keep their own faces and ages. Clothes are stated per scene, or the
-    reference's clothes are copied (Mae's paisley shawl at the lawyer's in the test)."""
+    the people's reference drawings, so 3-4 people keep their own faces and ages. Name the people only: listing their
+    full descriptions made it draw each person twice (the reference + the description) and add children (episode 3's
+    first run). Mae's clothes are stated, or she copies the reference's shawl."""
     people = [c for c in cast if ref_file(c)]
-    who = []
-    for c in people:
-        p = CAST["people"][c]
-        if c == "mae":
-            who.append(f"Mae, the elderly woman with the long silver braid, wearing{mae_wear(prompt)[len(', wearing'):]}")
-        else:
-            who.append(p["description"].replace("Black American ", ""))
+    # no commas inside a name: "Mae, the old woman with the silver braid, Ray" read as four people (episode 2 redo)
+    names = [("Mae (the old woman with the silver braid)" if c == "mae" else CAST["people"][c]["name"]) for c in people]
     scene = re.sub(r"^(She|she)\b", "Mae", prompt)
-    text = (f"Draw a brand-new illustration of this scene with the people from the reference picture, left to right: "
-            f"{'; '.join(who)}. Scene: {scene} Keep each person's face, age, skin tone and hair exactly as in the reference, "
-            f"dressed as described here, not as in the reference. Exactly the people the scene names, no one else. "
-            f"Draw it in the same hand-drawn style: warm sepia-brown ink line work with soft watercolour washes on aged cream "
-            f"paper, like an old family journal sketch. No text, no letters. Wide 16:9 composition.")
+    wear = f" In this scene Mae wears{mae_wear(prompt)[len(', wearing'):]}." if "mae" in people else ""
+    short = [CAST["people"][c]["name"] for c in people]
+    only = (f"{short[0]} appears once" if len(short) == 1 else f"Each of {', '.join(short[:-1])} and {short[-1]} appears once")
+    only += f" (exactly {len(short)} {'person' if len(short) == 1 else 'people'} from the reference)"
+    text = (f"Draw a brand-new illustration using the people shown in the reference picture ({', '.join(names)}), in this scene: "
+            f"{scene}{wear} {only[0].upper() + only[1:]}, never twice; no children and no other people unless the scene names them. "
+            f"Keep every person's face, age, skin tone and hair exactly as in the reference, and draw it in the same hand-drawn "
+            f"style: warm sepia-brown ink line work with soft watercolour washes on aged cream paper, like an old family journal "
+            f"sketch. No text. Wide 16:9 composition.")
     return people, text
 
 
@@ -146,6 +146,21 @@ def finish_wan(src, dest, seconds):
     vf = f"setpts={stretch:.4f}*PTS,minterpolate=fps=24:mi_mode=mci:mc_mode=aobmc:me_mode=bidir,scale=1920:1080:flags=lanczos"
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src, "-vf", vf, "-an", "-c:v", "libx264", "-crf", "14", "-preset", "slow",
                     "-pix_fmt", "yuv420p", dest], check=True)
+
+
+def mouth_motion(path, box=(940, 395, 110, 50)):
+    """Average frame-to-frame change in the mouth area of a talking shot (Mae's medium shots put her mouth at about
+    x 940-1050, y 395-445 of 1920x1088). Talking: ~10+; LTX sometimes holds a smile instead (< ~2: redo it)."""
+    import subprocess
+    import numpy as np
+    x, y, w, h = box
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-vf", f"fps=6,crop={w}:{h}:{x}:{y},format=gray", "-f", "rawvideo", "-"],
+                         capture_output=True).stdout
+    a = np.frombuffer(raw, np.uint8)
+    if not a.size:
+        return 0.0
+    a = a.reshape(-1, h, w).astype(float)
+    return float(np.abs(np.diff(a, axis=0)).mean()) if len(a) > 1 else 0.0
 
 
 CROWD = re.compile(r"\b(adults|relatives|family members|the family|people|guests|everyone|others|cousins|neighbors)\b", re.I)
@@ -175,6 +190,8 @@ def main():
     ap.add_argument("--method", choices=["ref", "lora"], default="ref",
                     help="ref: drawings with recurring people are made from their reference drawings (Qwen-Image-Edit); lora: Z-Image + cast LoRAs")
     ap.add_argument("--animator", choices=["wan", "ltx"], default="wan", help="clips: Wan 2.2 (default) or LTX-2.5")
+    ap.add_argument("--wan-size", choices=["480", "720"], default="480",
+                    help="480: 832x480 + 2x AnimeSharpV4 upscale on the GPU (~2x faster); 720: 1280x720 straight")
     ap.add_argument("--keys-run", help="the run whose out/ holds the reviewed keyframes (for --stage clips)")
     a = ap.parse_args()
     vdir = os.path.join(ROOT, "topics", a.slug, *a.video.split("/"))
@@ -198,6 +215,13 @@ def main():
                 n += 1
         json.dump(made, open(mpath, "w"), indent=1)
         print(f"{n} files into {gen} (manifest.json updated)")
+        # lip-sync check: a talking shot whose mouth barely moves gets flagged (episode 3: 5 of 28 held a smile)
+        for j in spec["jobs"]:
+            f = os.path.join(gen, j["out"])
+            if j["kind"] == "talk" and os.path.exists(f):
+                m = mouth_motion(f)
+                if m < 3:
+                    print(f"  LIP-SYNC? {j['id']}: mouth motion {m:.1f} (talking is ~10): regenerate it with another seed")
         return
 
     kinds = set(a.only.split(","))
@@ -230,8 +254,9 @@ def main():
             if a.stage != "keys":
                 img = f"jobs/{a.keys_run}/out/{key}" if a.stage == "clips" else "out/" + key
                 if a.animator == "wan":
+                    size = {"width": 832, "height": 480, "upscaler": "2x-AnimeSharpV4_Fast_RCAN_PU.safetensors"} if a.wan_size == "480" else {}
                     jobs.append({"id": j["id"], "kind": "wan", "image": img, "prompt": j["prompt"] + WAN_MOTION,
-                                 "seconds": j["seconds"], "seed": j["seed"], "out": j["out"]})
+                                 "seconds": j["seconds"], "seed": j["seed"], **size, "out": j["out"]})
                 else:
                     jobs.append({"id": j["id"], "kind": "i2v", "image": img, "prompt": j["prompt"] + MOTION,
                                  "seconds": j["seconds"], "seed": j["seed"], "megapixels": 2.1, "out": j["out"]})

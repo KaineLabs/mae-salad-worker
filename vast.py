@@ -109,7 +109,7 @@ def offers(disk, down_gb, up_gb, hours, max_price, max_gb, min_vram, bid=0.0, gp
 
 def _offers(disk, down_gb, up_gb, hours, max_price, max_gb, min_vram, bid, gpus):
     q = {"num_gpus": {"eq": 1}, "gpu_ram": {"gte": min_vram * 1000}, "compute_cap": {"gte": 800}, "cuda_max_good": {"gte": 13.0},
-         "rentable": {"eq": True}, "rented": {"eq": False}, "disk_space": {"gte": disk}, "reliability2": {"gte": 0.97},
+         "rentable": {"eq": True}, "rented": {"eq": False}, "disk_space": {"gte": disk}, "reliability2": {"gte": 0.97}, "cpu_ram": {"gte": 48000},
          "inet_down": {"gte": 400}, "inet_down_cost": {"lte": max_gb},
          "type": "bid" if bid else "ondemand", "allocated_storage": disk, "order": [["dph_total", "asc"]], "limit": 400}
     if gpus:
@@ -303,7 +303,9 @@ def cmd_watch(a):
             rents += 1
             time.sleep(60)
             continue
-        complete = state in ("done", "done with failures") and st.get("total") and st.get("done", 0) + len(st.get("failed", [])) >= st["total"]
+        # a status written by an earlier machine of this run doesn't count (a crashed run's "done with failures")
+        mine = fresh or (i is not None and str(st.get("machine", "")) == str(i.get("machine_id")))
+        complete = mine and state in ("done", "done with failures") and st.get("total") and st.get("done", 0) + len(st.get("failed", [])) >= st["total"]
         if complete or state in ("done", "done with failures", "failed", "crashed") and fresh:
             destroy(label)
             print(f"FINISHED ({state}); credit ${credit():.2f} (was ${c0:.2f})", flush=True)
