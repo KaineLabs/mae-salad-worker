@@ -175,7 +175,7 @@ def reallocate_self(why):
 
 
 # seconds a job may take on a healthy 24 GB card before the machine counts as broken (warm-up job excluded)
-SLOW = {"edit": 120, "t2i": 120, "i2v": 900, "talk": 1500, "wan": 1500}
+SLOW = {"edit": 120, "t2i": 120, "i2v": 900, "talk": 1500, "wan": 1500, "h3": 2400}
 
 
 def finish(state):
@@ -438,6 +438,18 @@ def job_wan(j):
     return output_file(run_workflow(w, max(900, j.get("seconds", 5) * 240)), (".mp4",))
 
 
+def job_h3(j):
+    """MiniMax H3 image-to-video (33B, pruned int8 + 8-step turbo LoRA, NVFP4 text encoder: needs a Blackwell card,
+    RTX 5090 / PRO 6000): 1344x768 at 24 fps; frames on its 17k+5 grid (5 s = 124)."""
+    w = wf("video_minimax_h3_i2v")
+    w["114"]["inputs"]["image"] = input_file(j["image"])
+    w["104"]["inputs"]["prompt"] = j["prompt"]
+    n = max(5, round(j.get("seconds", 5) * 24))
+    w["104"]["inputs"]["length"] = n + (5 - n % 17) % 17
+    w["15"]["inputs"]["noise_seed"] = j["seed"]
+    return output_file(run_workflow(w, max(1200, j.get("seconds", 5) * 300)), (".mp4",))
+
+
 def job_talk(j):
     w = wf("video_ltx2_3_ia2v")
     w["269"]["inputs"]["image"] = input_file(j["image"])
@@ -450,7 +462,7 @@ def job_talk(j):
     return output_file(run_workflow(w, max(1200, j["seconds"] * 120)), (".mp4",))
 
 
-KINDS = {"t2i": (job_t2i, ["zimage"]), "edit": (job_edit, ["qwen_edit"]), "i2v": (job_i2v, ["ltx25"]), "talk": (job_talk, ["ltx23"]), "wan": (job_wan, ["wan22", "upscale"])}
+KINDS = {"t2i": (job_t2i, ["zimage"]), "edit": (job_edit, ["qwen_edit"]), "i2v": (job_i2v, ["ltx25"]), "talk": (job_talk, ["ltx23"]), "wan": (job_wan, ["wan22", "upscale"]), "h3": (job_h3, ["h3"])}
 
 
 def run_gen():
@@ -478,7 +490,7 @@ def run_gen():
     STATUS["state"] = "generating"
     timings = {}
     # stills before the clips made from them (a clip's image can be another job's output)
-    order = {"edit": 0, "t2i": 1, "talk": 2, "i2v": 3, "wan": 4}
+    order = {"edit": 0, "t2i": 1, "talk": 2, "i2v": 3, "wan": 4, "h3": 5}
     for j in sorted(todo, key=lambda j: order[j["kind"]]):
         t = time.time()
         STATUS["current"] = f"{j['kind']} {j['id']}"

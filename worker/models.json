@@ -140,5 +140,32 @@
    "RealESRGAN_x2.pth",
    "upscale_models"
   ]
+ ],
+ "h3": [
+  [
+   "Comfy-Org/MiniMax-H3",
+   "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+   "diffusion_models"
+  ],
+  [
+   "Comfy-Org/MiniMax-H3",
+   "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+   "loras"
+  ],
+  [
+   "Comfy-Org/MiniMax-H3",
+   "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+   "text_encoders"
+  ],
+  [
+   "Comfy-Org/MiniMax-H3",
+   "vae/minimax_h3_video_vae_int8_convrot.safetensors",
+   "vae"
+  ],
+  [
+   "Comfy-Org/MiniMax-H3",
+   "vae/minimax_h3_audio_vae_fp32.safetensors",
+   "vae"
+  ]
  ]
 }

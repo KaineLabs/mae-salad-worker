@@ -37,7 +37,7 @@ SPEED = {"RTX 5090": 0.7, "RTX 4090": 1.0, "RTX 4090D": 1.1, "L40S": 1.0, "RTX 6
          "RTX 5880Ada": 1.1, "RTX 3090 Ti": 1.6, "RTX 3090": 1.8, "RTX A6000": 1.7, "A40": 1.8, "RTX PRO 4000": 1.8,
          "RTX A5000": 2.0, "A10": 2.6, "RTX 4000Ada": 2.4}
 # seconds per job on a 4090, and the image + models each run downloads
-JOB_S = {"edit": 8, "t2i": 12, "i2v": 150, "talk": 240, "wan": 200}
+JOB_S = {"edit": 8, "t2i": 12, "i2v": 150, "talk": 240, "wan": 200, "h3": 300}
 IMAGE_GB = 10
 TRAIN_H = 0.45  # one LoRA, 1200 steps, on a 4090
 
