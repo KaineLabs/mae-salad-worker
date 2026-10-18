@@ -442,7 +442,12 @@ def job_h3(j):
     """MiniMax H3 image-to-video (33B, pruned int8 + 8-step turbo LoRA, NVFP4 text encoder: needs a Blackwell card,
     RTX 5090 / PRO 6000): 1344x768 at 24 fps; frames on its 17k+5 grid (5 s = 124)."""
     w = wf("video_minimax_h3_i2v")
-    w["114"]["inputs"]["image"] = input_file(j["image"])
+    if j.get("image"):
+        w["114"]["inputs"]["image"] = input_file(j["image"])
+    else:
+        # text only (t2va): H3 draws the scene itself
+        del w["114"]
+        del w["104"]["inputs"]["first_frame"]
     w["104"]["inputs"]["prompt"] = j["prompt"]
     n = max(5, round(j.get("seconds", 5) * 24))
     w["104"]["inputs"]["length"] = n + (5 - n % 17) % 17
