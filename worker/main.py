@@ -175,7 +175,7 @@ def reallocate_self(why):
 
 
 # seconds a job may take on a healthy 24 GB card before the machine counts as broken (warm-up job excluded)
-SLOW = {"edit": 120, "t2i": 120, "i2v": 900, "talk": 1500}
+SLOW = {"edit": 120, "t2i": 120, "i2v": 900, "talk": 1500, "wan": 1500}
 
 
 def finish(state):
@@ -421,6 +421,17 @@ def job_i2v(j):
     return output_file(run_workflow(w, max(900, j["seconds"] * 200)), (".mp4",))
 
 
+def job_wan(j):
+    """Wan 2.2 image-to-video (14B, two experts, 4-step lightx2v LoRAs): 1280x720 at 16 fps, 81 frames = ~5 s
+    (frames: 4n+1; longer clips go up to 121 = ~7.5 s)."""
+    w = wf("video_wan2_2_i2v")
+    w["11"]["inputs"]["image"] = input_file(j["image"])
+    w["9"]["inputs"]["text"] = j["prompt"]
+    w["12"]["inputs"]["length"] = min(121, max(33, int(j.get("seconds", 5) * 16) // 4 * 4 + 1))
+    w["13"]["inputs"]["noise_seed"] = j["seed"]
+    return output_file(run_workflow(w, max(900, j.get("seconds", 5) * 240)), (".mp4",))
+
+
 def job_talk(j):
     w = wf("video_ltx2_3_ia2v")
     w["269"]["inputs"]["image"] = input_file(j["image"])
@@ -433,7 +444,7 @@ def job_talk(j):
     return output_file(run_workflow(w, max(1200, j["seconds"] * 120)), (".mp4",))
 
 
-KINDS = {"t2i": (job_t2i, ["zimage"]), "edit": (job_edit, ["qwen_edit"]), "i2v": (job_i2v, ["ltx25"]), "talk": (job_talk, ["ltx23"])}
+KINDS = {"t2i": (job_t2i, ["zimage"]), "edit": (job_edit, ["qwen_edit"]), "i2v": (job_i2v, ["ltx25"]), "talk": (job_talk, ["ltx23"]), "wan": (job_wan, ["wan22"])}
 
 
 def run_gen():
@@ -461,7 +472,7 @@ def run_gen():
     STATUS["state"] = "generating"
     timings = {}
     # stills before the clips made from them (a clip's image can be another job's output)
-    order = {"edit": 0, "t2i": 1, "talk": 2, "i2v": 3}
+    order = {"edit": 0, "t2i": 1, "talk": 2, "i2v": 3, "wan": 4}
     for j in sorted(todo, key=lambda j: order[j["kind"]]):
         t = time.time()
         STATUS["current"] = f"{j['kind']} {j['id']}"

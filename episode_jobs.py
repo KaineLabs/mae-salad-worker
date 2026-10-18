@@ -72,6 +72,10 @@ def journal_prompt(prompt, cast):
         elif p.get("lora"):
             rel = p["description"].split(",")[0]  # "her son Ray"
             prompt = prompt.replace(rel, f"{rel} ({p['trigger']})", 1)
+    if not any(CAST["people"].get(c, {}).get("lora") for c in cast):
+        # no cast LoRA (they carry the journal style): objects and hands drift to photographs (s14, s21 in episode 2),
+        # so the style goes first, where Z-Image weighs it most
+        lead = "A hand-drawn sepia ink and watercolour sketch on aged cream paper, not a photograph, not 3D: " + lead
     return f"{lead}{prompt} {CAST['style']}"
 
 
