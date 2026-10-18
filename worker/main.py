@@ -202,7 +202,16 @@ def download_models(groups):
         if os.path.exists(dest):
             return
         t = time.time()
-        p = hf_hub_download(repo, path, local_dir=os.path.join(WORK, "dl"), token=os.environ.get("HF_TOKEN") or None)
+        # HuggingFace's storage (xet) drops a download now and then: retry before giving up on the machine
+        for attempt in range(4):
+            try:
+                p = hf_hub_download(repo, path, local_dir=os.path.join(WORK, "dl"), token=os.environ.get("HF_TOKEN") or None)
+                break
+            except Exception as e:
+                if attempt == 3:
+                    raise
+                log(f"download {os.path.basename(path)} failed ({str(e)[:120]}); retrying")
+                time.sleep(20 * (attempt + 1))
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.move(p, dest)
         log("model %s %.1f GB in %.0f s" % (os.path.basename(path), os.path.getsize(dest) / 1e9, time.time() - t))

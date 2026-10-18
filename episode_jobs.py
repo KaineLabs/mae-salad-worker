@@ -43,6 +43,22 @@ def loras_for(cast):
     return out
 
 
+# Mae's clothes when a prompt doesn't name them: without them she borrows the other person's outfit (Ray's green
+# work shirt, Carol's denim jacket in the Vast test, 2026-10-18); the season in the prompt picks one
+MAE_WEAR = [(("winter", "christmas", "snow"), "a thick gray wool cardigan over a white blouse"),
+            (("autumn", "fall", "thanksgiving", "november"), "a rust-brown knit cardigan over a cream blouse"),
+            (("spring", "easter"), "a soft lavender cardigan over a white blouse"),
+            (("summer", "reunion", "picnic"), "a light blue cotton blouse with short sleeves")]
+
+
+def mae_wear(prompt):
+    low = prompt.lower()  # the prompts never dress Mae ("wearing …" in them is always someone else's clothes)
+    for words, wear in MAE_WEAR:
+        if any(w in low for w in words):
+            return f", wearing {wear}"
+    return ", wearing a cream knit cardigan over a white blouse"
+
+
 def journal_prompt(prompt, cast):
     """The scene prompt in the journal style, with each LoRA person's trigger right after their name
     ("her son Ray, a man…" → "her son Ray (r4yhnd man), a man…"); Mae, who is "she" in the prompts, is introduced first."""
@@ -50,7 +66,8 @@ def journal_prompt(prompt, cast):
     for c in cast:
         p = CAST["people"][c]
         if c == "mae":
-            lead = f"{p['trigger']}, {p['description']}. " if p.get("lora") else f"{p['description']}. "
+            desc = p["description"] + mae_wear(prompt)
+            lead = f"{p['trigger']}, {desc}. " if p.get("lora") else f"{desc}. "
             prompt = re.sub(r"^(She|she)\b", "Mae", prompt)
         elif p.get("lora"):
             rel = p["description"].split(",")[0]  # "her son Ray"
