@@ -429,6 +429,12 @@ def job_wan(j):
     w["9"]["inputs"]["text"] = j["prompt"]
     w["12"]["inputs"]["length"] = min(121, max(33, int(j.get("seconds", 5) * 16) // 4 * 4 + 1))
     w["13"]["inputs"]["noise_seed"] = j["seed"]
+    # small and fast (e.g. 832x480, ~2x quicker than 720p), then a 2x line-art upscaler on the GPU
+    w["12"]["inputs"]["width"], w["12"]["inputs"]["height"] = j.get("width", 1280), j.get("height", 720)
+    if j.get("upscaler"):
+        w["18"] = {"class_type": "UpscaleModelLoader", "inputs": {"model_name": j["upscaler"]}}
+        w["19"] = {"class_type": "ImageUpscaleWithModel", "inputs": {"upscale_model": ["18", 0], "image": ["15", 0]}}
+        w["16"]["inputs"]["images"] = ["19", 0]
     return output_file(run_workflow(w, max(900, j.get("seconds", 5) * 240)), (".mp4",))
 
 
@@ -444,7 +450,7 @@ def job_talk(j):
     return output_file(run_workflow(w, max(1200, j["seconds"] * 120)), (".mp4",))
 
 
-KINDS = {"t2i": (job_t2i, ["zimage"]), "edit": (job_edit, ["qwen_edit"]), "i2v": (job_i2v, ["ltx25"]), "talk": (job_talk, ["ltx23"]), "wan": (job_wan, ["wan22"])}
+KINDS = {"t2i": (job_t2i, ["zimage"]), "edit": (job_edit, ["qwen_edit"]), "i2v": (job_i2v, ["ltx25"]), "talk": (job_talk, ["ltx23"]), "wan": (job_wan, ["wan22", "upscale"])}
 
 
 def run_gen():

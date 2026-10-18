@@ -128,5 +128,17 @@
    "split_files/vae/wan_2.1_vae.safetensors",
    "vae"
   ]
+ ],
+ "upscale": [
+  [
+   "Kim2091/2x-AnimeSharpV4",
+   "2x-AnimeSharpV4_Fast_RCAN_PU.safetensors",
+   "upscale_models"
+  ],
+  [
+   "ai-forever/Real-ESRGAN",
+   "RealESRGAN_x2.pth",
+   "upscale_models"
+  ]
  ]
 }
