@@ -44,7 +44,7 @@ MAX_MINUTES = float(os.environ.get("MAX_MINUTES", "480"))
 s3 = boto3.client("s3", endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
                   aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"], aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
                   region_name="auto", config=Config(retries={"max_attempts": 10, "mode": "standard"}))
-STATUS = {"mode": MODE, "run": RUN, "machine": os.environ.get("SALAD_MACHINE_ID", "?"), "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+STATUS = {"mode": MODE, "run": RUN, "machine": os.environ.get("SALAD_MACHINE_ID") or os.environ.get("VAST_MACHINE_ID") or "?", "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
           "state": "starting", "log": []}
 
 
@@ -109,10 +109,29 @@ def heartbeat():
         time.sleep(60)
 
 
-# ---------- Salad ----------
+# ---------- Salad / Vast.ai ----------
+
+# On Vast.ai every instance carries CONTAINER_ID and CONTAINER_API_KEY, a key that can only stop or destroy that
+# one instance: the worker destroys itself when done (destroyed = no GPU, disk or bandwidth billing).
+VAST_ID, VAST_KEY = os.environ.get("CONTAINER_ID"), os.environ.get("CONTAINER_API_KEY")
+
+
+def vast_destroy():
+    for _ in range(5):
+        try:
+            urllib.request.urlopen(urllib.request.Request(f"https://console.vast.ai/api/v0/instances/{VAST_ID}/", method="DELETE",
+                                                          headers={"Authorization": f"Bearer {VAST_KEY}"}), timeout=30)
+            log("destroy requested")
+            return
+        except Exception as e:
+            log(f"destroy failed: {e}")
+            time.sleep(10)
+
 
 def stop_group():
     """Stops our own container group (billing ends); the Mac tool also stops it when it sees the run is done."""
+    if VAST_ID and VAST_KEY:
+        return vast_destroy()
     org, proj, name, key = (os.environ.get(k) for k in ("SALAD_ORG", "SALAD_PROJECT", "SALAD_GROUP", "SALAD_API_KEY"))
     if not all((org, proj, name, key)):
         log("no Salad credentials: cannot stop the group myself")
@@ -129,7 +148,16 @@ def stop_group():
 
 
 def reallocate_self(why):
-    """Asks Salad to move this run to another machine (a broken or overloaded node: 60x slower edits were seen)."""
+    """Asks Salad to move this run to another machine (a broken or overloaded node: 60x slower edits were seen).
+    On Vast.ai the instance records the machine as bad and destroys itself; the Mac's `vast.py watch` rents another."""
+    if VAST_ID and VAST_KEY:
+        log(f"too slow ({why}): leaving this machine")
+        STATUS["state"] = "slow machine"
+        STATUS["bad_machine"] = STATUS["machine"]
+        put_json(STATUS, f"status/{RUN}.json")
+        vast_destroy()
+        time.sleep(3600)
+        return
     org, proj, name, key = (os.environ.get(k) for k in ("SALAD_ORG", "SALAD_PROJECT", "SALAD_GROUP", "SALAD_API_KEY"))
     me = os.environ.get("SALAD_MACHINE_ID")
     base = f"https://api.salad.com/api/public/organizations/{org}/projects/{proj}/containers/{name}/instances"
@@ -457,6 +485,8 @@ if __name__ == "__main__":
         STATUS["gpu"] = gpu
         log("GPU: " + gpu)
         ok = subprocess.run(["/opt/comfy-venv/bin/python", "-c", "import torch; assert torch.cuda.is_available(); torch.zeros(1).cuda()"]).returncode == 0
+        if not ok and VAST_ID:
+            reallocate_self("CUDA not usable on this machine")
         if not ok:
             # CUDA 13 wheels need driver >= 580; exiting makes Salad restart us, and repeated failures move us to another node
             log("CUDA not usable on this node (driver too old?): exiting so Salad reallocates")
