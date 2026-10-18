@@ -128,6 +128,28 @@ def stop_group():
             time.sleep(10)
 
 
+def reallocate_self(why):
+    """Asks Salad to move this run to another machine (a broken or overloaded node: 60x slower edits were seen)."""
+    org, proj, name, key = (os.environ.get(k) for k in ("SALAD_ORG", "SALAD_PROJECT", "SALAD_GROUP", "SALAD_API_KEY"))
+    me = os.environ.get("SALAD_MACHINE_ID")
+    base = f"https://api.salad.com/api/public/organizations/{org}/projects/{proj}/containers/{name}/instances"
+    h = {"Salad-Api-Key": key or "", "User-Agent": "mae-salad/1.0"}
+    try:
+        with urllib.request.urlopen(urllib.request.Request(base, headers=h), timeout=30) as r:
+            inst = [i for i in json.loads(r.read())["instances"] if i.get("machine_id") == me]
+        if inst:
+            log(f"too slow ({why}): asking Salad for another machine")
+            put_json(STATUS, f"status/{RUN}.json")
+            urllib.request.urlopen(urllib.request.Request(f"{base}/{inst[0]['id']}/reallocate", method="POST", headers=h), timeout=30)
+            time.sleep(600)
+    except Exception as e:
+        log(f"reallocate failed: {e}")
+
+
+# seconds a job may take on a healthy 24 GB card before the machine counts as broken (warm-up job excluded)
+SLOW = {"edit": 120, "t2i": 120, "i2v": 900, "talk": 1500}
+
+
 def finish(state):
     STATUS["state"] = state
     STATUS["finished"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -413,6 +435,12 @@ def run_gen():
             STATUS["done"] += 1
             timings[j["id"]] = round(time.time() - t, 1)
             log(f"{j['kind']} {j['id']} done in {timings[j['id']]:.0f} s ({STATUS['done']}/{STATUS['total']})")
+            if len(timings) > 1 and timings[j["id"]] > SLOW[j["kind"]] * (j.get("seconds", 1) if j["kind"] in ("i2v", "talk") else 1) / (10 if j["kind"] in ("i2v", "talk") else 1):
+                reallocate_self(f"{j['id']} took {timings[j['id']]:.0f} s")
+        except TimeoutError as e:
+            STATUS["failed"].append(j["id"])
+            log(f"{j['kind']} {j['id']} FAILED: {str(e)[:300]}")
+            reallocate_self(f"{j['id']} timed out")
         except Exception as e:
             STATUS["failed"].append(j["id"])
             log(f"{j['kind']} {j['id']} FAILED: {str(e)[:300]}")

@@ -78,7 +78,7 @@ def data(name, src, drop):
     shutil.rmtree(d, ignore_errors=True)
     os.makedirs(d)
     shutil.copy(os.path.join(LORA, name, "ref.png"), os.path.join(d, "00.png"))
-    ref_cap = "waist-up portrait, front view, calm slight smile" if name != "mae" else "sitting in a white rocking chair on a porch, front view, calm half-smile"
+    ref_cap = "waist-up portrait, front view, calm slight smile"
     open(os.path.join(d, "00.txt"), "w").write(caption(name, "00", ref_cap))
     kept = 0
     for sid, cap, _ in SHOTS:
@@ -98,16 +98,20 @@ def data(name, src, drop):
 
 
 def sheet(src):
+    from PIL import Image, ImageDraw
     files = sorted(f for f in os.listdir(src) if f.endswith(".png"))
-    out = os.path.join(src, "sheet.jpg")
-    args = sum((["-i", os.path.join(src, f)] for f in files), [])
-    cols = 4
+    cols, size = 4, 384
     rows = (len(files) + cols - 1) // cols
-    layout = "|".join(f"{(i % cols) * 384}_{(i // cols) * 384}" for i in range(len(files)))
-    scale = ";".join(f"[{i}]scale=384:384,drawtext=text='{f[:-4]}':x=8:y=8:fontsize=28:fontcolor=red[v{i}]" for i, f in enumerate(files))
-    filt = f"{scale};{''.join(f'[v{i}]' for i in range(len(files)))}xstack=inputs={len(files)}:layout={layout}:fill=white"
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", *args, "-filter_complex", filt, out], check=True)
-    print(out, f"({rows} rows)")
+    out = Image.new("RGB", (cols * size, rows * size), "white")
+    for i, f in enumerate(files):
+        im = Image.open(os.path.join(src, f)).convert("RGB")
+        im.thumbnail((size, size))
+        x, y = (i % cols) * size, (i // cols) * size
+        out.paste(im, (x, y))
+        ImageDraw.Draw(out).text((x + 8, y + 8), f[:-4], fill="red")
+    path = os.path.join(src, "sheet.jpg")
+    out.save(path, quality=88)
+    print(path, f"({rows} rows)")
 
 
 if __name__ == "__main__":
